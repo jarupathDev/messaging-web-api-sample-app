@@ -34,25 +34,41 @@ export default function Conversation(props) {
     let [isAnotherParticipantTyping, setIsAnotherParticipantTyping] = useState(false);
 
     useEffect(() => {
-        let conversationStatePromise;
+        let isSubscribed = true;
 
-        conversationStatePromise = props.isExistingConversation ? handleExistingConversation() : handleNewConversation();
-        conversationStatePromise
-        .then(() => {
-            handleSubscribeToEventSource()
-            .then(props.uiReady(true)) // Let parent (i.e. MessagingWindow) know the app is UI ready so that the parent can decide to show the actual Messaging window UI.
-            .catch(() => {
-                props.showMessagingWindow(false);
-            })
-        });
+        const initializeConversation = async () => {
+            try {
+                // Initialize conversation state
+                if (props.isExistingConversation) {
+                    await handleExistingConversation();
+                } else {
+                    await handleNewConversation();
+                }
 
-        return () => {
-            conversationStatePromise
-            .then(() => {
-                cleanupMessagingData();
-            });
+                // Only proceed if component is still mounted
+                if (isSubscribed) {
+                    await handleSubscribeToEventSource();
+                    props.uiReady(true);
+                }
+            } catch (error) {
+                console.error('Failed to initialize conversation:', error);
+                if (isSubscribed) {
+                    props.showMessagingWindow(false);
+                }
+            }
         };
-    }, []);
+
+        initializeConversation();
+
+        // Cleanup function
+        return () => {
+            isSubscribed = false;
+            // Only cleanup if we have an active conversation
+            if (conversationStatus === CONVERSATION_CONSTANTS.ConversationStatus.OPENED_CONVERSATION) {
+                cleanupMessagingData();
+            }
+        };
+    }, [props.isExistingConversation]);
 
     /**
      * Update conversation status state based on the event from a child component i.e. MessagingHeader.
@@ -388,7 +404,6 @@ export default function Conversation(props) {
      *  1. Parse, populate, and create ConversationEntry object based on its entry type.
      *      NOTE: Skip processing ROUTING_RESULT if the newly created ConversationEntry is undefined or invalid or not from the current conversation.
      *  2. Updates in-memory list of conversation entries and the updated list gets reactively passed on to MessagingBody.
-     *
      *  NOTE: Update the chat client based on the latest routing result. E.g. if the routing type is transfer, set an internal flag like `isTransferring` to 'true' and use that to show a transferring indicator in the ui.
      * @param {object} event - Event data payload from server-sent event.
      */

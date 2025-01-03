@@ -37,15 +37,22 @@ function sendFetchRequest(apiPath, method, mode, requestHeaders, requestBody) {
 			// Unauthorized request. Clear the web storage.
 			clearWebStorage();
 		}
+
 		if (!response.ok) {
-			let responseObject;
+			const error = new Error(`Request failed with status ${response.status}`);
+			error.status = response.status;
+			error.statusText = response.statusText;
+			
 			try {
-				responseObject = Object.assign(response, await response.json());
+				const errorData = await response.json();
+				error.message = errorData.message || error.message;
 			} catch (e) {
-				responseObject = Object.assign(response, {"message": `Error reading the body stream of error object: ${response}`});
+				// If we can't parse the error response, just use the default message
 			}
-			throw responseObject;
+			
+			throw error;
 		}
+
 		return response;
 	});
 };
